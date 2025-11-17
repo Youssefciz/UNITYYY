@@ -4,6 +4,12 @@ using TMPro;
 
 public class PlayerController : MonoBehaviour
 {
+
+    // Respawn system variables
+    private RespawnPoint currentRespawnPoint;
+    private Vector3 initialSpawnPosition;
+    private Quaternion initialSpawnRotation;
+
     // Rigidbody of the player.
     private Rigidbody rb;
 
@@ -41,8 +47,18 @@ public class PlayerController : MonoBehaviour
     // UI object to display winning text.
     public GameObject winTextObject;
 
-    // Reference to the door object.
-    public GameObject doorObject;
+    // Dash variables
+    private bool dashRequested = false;
+    private bool isDashing = false;
+    private float dashTimer = 0f;
+    public float dashForce = 20f;
+    public float dashDuration = 0.2f;
+    public float dashCooldown = 1f;
+    private float dashCooldownTimer = 0f;
+    private Vector3 dashDirection = Vector3.zero;
+    
+    // Win condition flag to prevent multiple triggers
+    private bool winConditionTriggered = false;
 
     // Start is called before the first frame update.
     void Start()
@@ -52,6 +68,10 @@ public class PlayerController : MonoBehaviour
 
         // Get collider for ground detection
         playerCollider = GetComponent<Collider>();
+
+        // Store initial spawn position and rotation
+        initialSpawnPosition = transform.position;
+        initialSpawnRotation = transform.rotation;
 
         // Initialize count to zero.
         count = 0;
@@ -119,6 +139,16 @@ public class PlayerController : MonoBehaviour
             jumpRequested = true;
         }
     }
+
+    // This function is called when dash input is detected (called by PlayerInput component).
+    void OnSprint(InputValue sprintValue)
+    {
+        // Request dash if button is pressed and cooldown is ready
+        if (sprintValue.isPressed && dashCooldownTimer <= 0f && !isDashing)
+        {
+            dashRequested = true;
+        }
+    }
     
     // Update is called once per frame - handle input here
     void Update()
@@ -127,6 +157,29 @@ public class PlayerController : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Space))
         {
             jumpRequested = true;
+        }
+        
+        // Check for dash input using old Input System as backup
+        if (Input.GetKeyDown(KeyCode.LeftShift) && dashCooldownTimer <= 0f && !isDashing)
+        {
+            dashRequested = true;
+        }
+        
+        // Update dash cooldown timer
+        if (dashCooldownTimer > 0f)
+        {
+            dashCooldownTimer -= Time.deltaTime;
+        }
+        
+        // Update dash timer
+        if (isDashing)
+        {
+            dashTimer -= Time.deltaTime;
+            if (dashTimer <= 0f)
+            {
+                isDashing = false;
+                dashCooldownTimer = dashCooldown;
+            }
         }
     }
 
@@ -137,6 +190,42 @@ public class PlayerController : MonoBehaviour
         
         // Check if player is on ground using raycast
         CheckGrounded();
+        
+        // Preserve current Y velocity for all movement calculations
+        float verticalVelocity = rb.linearVelocity.y;
+        
+        // Handle dash request
+        if (dashRequested && dashCooldownTimer <= 0f && !isDashing)
+        {
+            // Create a 3D movement vector using the X and Y inputs.
+            Vector3 dashMovement = new Vector3(movementX, 0.0f, movementY);
+            
+            // If there's no movement input, dash forward in the direction the player is facing
+            if (dashMovement.magnitude < 0.1f)
+            {
+                dashMovement = transform.forward;
+            }
+            else
+            {
+                dashMovement.Normalize();
+            }
+            
+            // Start dash
+            dashDirection = dashMovement;
+            isDashing = true;
+            dashTimer = dashDuration;
+            dashRequested = false;
+            dashCooldownTimer = dashCooldown;
+        }
+        
+        // Apply dash force if currently dashing
+        if (isDashing)
+        {
+            // Apply dash force in the dash direction
+            Vector3 dashVelocity = dashDirection * dashForce;
+            rb.linearVelocity = new Vector3(dashVelocity.x, verticalVelocity, dashVelocity.z);
+            return; // Skip normal movement during dash
+        }
         
         // Create a 3D movement vector using the X and Y inputs.
         Vector3 movement = new Vector3(movementX, 0.0f, movementY);
@@ -151,7 +240,6 @@ public class PlayerController : MonoBehaviour
         Vector3 targetVelocity = movement * speed;
         
         // Handle jump request (physics in FixedUpdate)
-        float verticalVelocity = rb.linearVelocity.y; // Preserve current Y velocity
         
         if (jumpRequested && isGrounded)
         {
@@ -213,6 +301,13 @@ public class PlayerController : MonoBehaviour
         // Check if the object the player collided with has the "PickUp" tag.
         if (other.gameObject.CompareTag("PickUp"))
         {
+            // Play pickup sound if the pickup has a PickupSound component
+            PickupSound pickupSound = other.GetComponent<PickupSound>();
+            if (pickupSound != null)
+            {
+                pickupSound.PlayPickupSound();
+            }
+            
             // Deactivate the collided object (making it disappear).
             other.gameObject.SetActive(false);
 
@@ -233,8 +328,11 @@ public class PlayerController : MonoBehaviour
         }
 
         // Check if the count has reached or exceeded the win condition.
-        if (count >= 12)
+        if (count >= 12 && !winConditionTriggered)
         {
+            // Prevent multiple triggers
+            winConditionTriggered = true;
+            
             // Display the win text.
             if (winTextObject != null)
             {
@@ -247,6 +345,8 @@ public class PlayerController : MonoBehaviour
             {
                 Destroy(enemy);
             }
+            
+            Debug.Log("You Win! All 12 pickups collected!");
         }
     }
 
@@ -283,5 +383,68 @@ public class PlayerController : MonoBehaviour
         
         // Destroy the player after a short delay so text can display
         Destroy(gameObject, 0.1f);
+    }
+
+
+    // Set the active respawn point (called by RespawnPoint when player touches it)
+    public void SetRespawnPoint(RespawnPoint respawnPoint)
+    {
+        // If this is a new checkpoint or a later one, update the respawn point
+        if (currentRespawnPoint == null || 
+            respawnPoint.checkpointOrder >= currentRespawnPoint.checkpointOrder)
+        {
+            // Deactivate old respawn point visual
+            if (currentRespawnPoint != null)
+            {
+                currentRespawnPoint.SetAsActiveRespawnPoint(false);
+            }
+            
+            // Set new respawn point
+            currentRespawnPoint = respawnPoint;
+            currentRespawnPoint.SetAsActiveRespawnPoint(true);
+        }
+    }
+    
+    // Respawn the player at the last checkpoint or initial spawn
+    public void Respawn()
+    {
+        Vector3 respawnPosition;
+        Quaternion respawnRotation;
+        
+        // Use current respawn point if available, otherwise use initial spawn
+        if (currentRespawnPoint != null)
+        {
+            respawnPosition = currentRespawnPoint.GetRespawnPosition();
+            respawnRotation = currentRespawnPoint.GetRespawnRotation();
+        }
+        else
+        {
+            respawnPosition = initialSpawnPosition;
+            respawnRotation = initialSpawnRotation;
+        }
+        
+        // Reset player position and rotation
+        transform.position = respawnPosition;
+        transform.rotation = respawnRotation;
+        
+        // Reset velocity
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+        
+        // Reset dash state
+        isDashing = false;
+        dashRequested = false;
+        dashTimer = 0f;
+        dashCooldownTimer = 0f;
+        
+        // Reset movement input
+        movementX = 0f;
+        movementY = 0f;
+        
+        // Reset jump request
+        jumpRequested = false;
     }
 }
