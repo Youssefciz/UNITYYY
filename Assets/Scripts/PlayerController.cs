@@ -339,11 +339,30 @@ public class PlayerController : MonoBehaviour
                 winTextObject.SetActive(true);
             }
 
-            // Destroy the enemy GameObject.
-            GameObject enemy = GameObject.FindGameObjectWithTag("Enemy");
-            if (enemy != null)
+            // Destroy the north wall to create an opening
+            GameObject northWallLeft = GameObject.Find("North Wall Left (1)");
+            // Try alternative path if not found (in case it's nested under Walls parent)
+            if (northWallLeft == null)
             {
-                Destroy(enemy);
+                northWallLeft = GameObject.Find("Walls/North Wall Left (1)");
+            }
+            if (northWallLeft == null)
+            {
+                northWallLeft = GameObject.Find("North Wall Left");
+            }
+            if (northWallLeft == null)
+            {
+                northWallLeft = GameObject.Find("Walls/North Wall Left");
+            }
+            
+            if (northWallLeft != null)
+            {
+                Destroy(northWallLeft);
+                Debug.Log("North Wall Left destroyed - path opened!");
+            }
+            else
+            {
+                Debug.LogWarning("Could not find North Wall Left to destroy!");
             }
             
             Debug.Log("You Win! All 12 pickups collected!");
