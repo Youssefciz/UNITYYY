@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using TMPro;
+using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
@@ -15,6 +16,9 @@ public class PlayerController : MonoBehaviour
 
     // Variable to keep track of collected "PickUp" objects.
     private int count;
+    
+    // Total number of pickups in the scene (computed dynamically at Start)
+    private int totalPickupsInScene = 0;
 
     // Movement along X and Y axes.
     private float movementX;
@@ -59,6 +63,9 @@ public class PlayerController : MonoBehaviour
     
     // Win condition flag to prevent multiple triggers
     private bool winConditionTriggered = false;
+    
+    // Flag to track if the north wall has been destroyed (after 12 pickups)
+    private bool wallDestroyed = false;
 
     // Start is called before the first frame update.
     void Start()
@@ -75,6 +82,9 @@ public class PlayerController : MonoBehaviour
 
         // Initialize count to zero.
         count = 0;
+        
+        // Count all pickups in the scene dynamically
+        CountTotalPickupsInScene();
         
         // Initialize movement to zero
         movementX = 0f;
@@ -313,6 +323,8 @@ public class PlayerController : MonoBehaviour
 
             // Increment the count of "PickUp" objects collected.
             count = count + 1;
+            
+            Debug.Log($"Pickup collected! Count: {count}/{totalPickupsInScene}");
 
             // Update the count display.
             SetCountText();
@@ -327,18 +339,11 @@ public class PlayerController : MonoBehaviour
             countText.text = "Count: " + count.ToString();
         }
 
-        // Check if the count has reached or exceeded the win condition.
-        if (count >= 12 && !winConditionTriggered)
+        // Destroy the north wall after collecting 12 pickups (opens Room 2)
+        if (count >= 12 && !wallDestroyed)
         {
-            // Prevent multiple triggers
-            winConditionTriggered = true;
+            wallDestroyed = true;
             
-            // Display the win text.
-            if (winTextObject != null)
-            {
-                winTextObject.SetActive(true);
-            }
-
             // Destroy the north wall to create an opening
             GameObject northWallLeft = GameObject.Find("North Wall Left (1)");
             // Try alternative path if not found (in case it's nested under Walls parent)
@@ -358,51 +363,43 @@ public class PlayerController : MonoBehaviour
             if (northWallLeft != null)
             {
                 Destroy(northWallLeft);
-                Debug.Log("North Wall Left destroyed - path opened!");
+                Debug.Log("North Wall Left destroyed - path opened to Room 2!");
             }
             else
             {
                 Debug.LogWarning("Could not find North Wall Left to destroy!");
             }
+        }
+
+        // Check if the count has reached or exceeded the win condition (all pickups collected).
+        if (totalPickupsInScene > 0 && count >= totalPickupsInScene && !winConditionTriggered)
+        {
+            // Prevent multiple triggers
+            winConditionTriggered = true;
             
-            Debug.Log("You Win! All 12 pickups collected!");
-        }
-    }
-
-    private void OnCollisionEnter(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("Enemy"))
-        {
-            OnEnemyCollision();
-        }
-    }
-
-    public void OnEnemyCollision()
-    {
-        // Update the winText to display "You Lose!" BEFORE destroying
-        if (winTextObject != null)
-        {
-            winTextObject.gameObject.SetActive(true);
-            var textComponent = winTextObject.GetComponent<TextMeshProUGUI>();
-            if (textComponent != null)
+            // Display the win text.
+            if (winTextObject != null)
             {
-                textComponent.text = "You Lose!";
+                winTextObject.SetActive(true);
             }
+            
+            Debug.Log($"You Win! All {totalPickupsInScene} pickups collected!");
+            
+            // Load next scene after a short delay
+            StartCoroutine(LoadNextSceneAfterDelay(2f));
         }
-        
-        // Disable player movement
-        enabled = false;
-        
-        // Hide the player visually
-        var meshRenderer = GetComponent<MeshRenderer>();
-        if (meshRenderer != null)
-        {
-            meshRenderer.enabled = false;
-        }
-        
-        // Destroy the player after a short delay so text can display
-        Destroy(gameObject, 0.1f);
     }
+    
+    private System.Collections.IEnumerator LoadNextSceneAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        // Load Level2_Terrain scene
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Level2_Terrain");
+    }
+
+    // Enemy collision handling has been moved to PlayerLives script
+    // This allows for a proper life system with respawn and invincibility
 
 
     // Set the active respawn point (called by RespawnPoint when player touches it)
@@ -465,5 +462,37 @@ public class PlayerController : MonoBehaviour
         
         // Reset jump request
         jumpRequested = false;
+    }
+    
+    // Count all pickups in the scene at Start
+    void CountTotalPickupsInScene()
+    {
+        // First, try to count all children under "PickUp Parent"
+        GameObject pickUpParent = GameObject.Find("PickUp Parent");
+        if (pickUpParent != null)
+        {
+            // Count all active children with "PickUp" tag
+            int childCount = 0;
+            foreach (Transform child in pickUpParent.transform)
+            {
+                if (child.gameObject.activeSelf && child.gameObject.CompareTag("PickUp"))
+                {
+                    childCount++;
+                }
+            }
+            totalPickupsInScene = childCount;
+            Debug.Log($"CountTotalPickupsInScene: Found {totalPickupsInScene} pickups under 'PickUp Parent'");
+        }
+        
+        // If no parent found or count is 0, fall back to counting all objects with "PickUp" tag
+        if (totalPickupsInScene == 0)
+        {
+            GameObject[] allPickups = GameObject.FindGameObjectsWithTag("PickUp");
+            totalPickupsInScene = allPickups.Length;
+            Debug.Log($"CountTotalPickupsInScene: Found {totalPickupsInScene} pickups by tag (no parent or parent was empty)");
+        }
+        
+        // Log the final count
+        Debug.Log($"Total pickups in scene: {totalPickupsInScene}");
     }
 }

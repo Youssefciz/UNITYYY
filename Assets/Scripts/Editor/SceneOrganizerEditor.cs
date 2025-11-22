@@ -233,7 +233,7 @@ public class SceneOrganizerEditor
 
     static void KeepOnlyOnePet()
     {
-        GameObject[] allObjects = Object.FindObjectsOfType<GameObject>();
+        GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None);
         GameObject firstPet = null;
         int removed = 0;
 

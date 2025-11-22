@@ -9,8 +9,8 @@ EditorBuildSettings:
     path: Assets/Scenes/ok.unity
     guid: 779f6f04cde076f41893192256771842
   - enabled: 1
-    path: Assets/Scenes/Level2.unity/Level2.unity
-    guid: 3321dd6c8bc7fd84da840e1ecc354f88
+    path: Assets/Scenes/Level2_Terrain.unity/Level2_Terrain.unity
+    guid: 21f6b6d6c5dc8ab48977ae3e5588137f
   m_configObjects:
     com.unity.input.settings: {fileID: 11400000, guid: d1071038300082843b062b7edbcdd6a9,
       type: 2}
